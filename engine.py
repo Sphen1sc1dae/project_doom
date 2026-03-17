@@ -168,7 +168,7 @@ class DoomGame:
         self.player_health = self.MAX_HEALTH # 시작 시 풀 피(100)
         self.ammo = 20  # 총알 개수 초기 설정 (예: 20발)
         self.rot_speed = 0.06 # 플레이어 회전 속도 변수.
-        self.move_speed = 6 # 플레이어 속도 변수. 해상도가 높다면 속도도 높일 것.
+        self.move_speed = 2 # 플레이어 속도 변수. 해상도가 높다면 속도도 높일 것.
         # self.monsters = [
         #     Monster(175, 170), Monster(320, 80),
         #     Monster(310, 280), Monster(75, 250) 
@@ -269,7 +269,7 @@ class DoomGame:
                 mx, my = 0, 0
                 
                 # 플레이어와 겹치지 않게 일정 거리(35px) 유지
-                if dist > 35:
+                if dist > 30:
                     # 이동 방향 벡터 계산 (몬스터의 speed 반영)
                     mx = (dx / dist) * m.speed
                     my = (dy / dist) * m.speed
@@ -290,7 +290,7 @@ class DoomGame:
                     m.y += my
 
             # 3. 플레이어 피격 판정 (매우 가까울 때만)
-            if dist_sq < 900: # 30의 제곱 -> 몬스터의 marzin값 고려하여 거리가 너무 가까운 것 같으면 값 증가
+            if dist_sq < 901: # 30의 제곱 -> 몬스터의 marzin값 고려하여 거리가 너무 가까운 것 같으면 값 증가
                 if self.damage_cooldown == 0:
                     self.player_health -= 20 # 플레이어 체력 100%에 대한 N% 데미지 값
                     self.damage_frames = 10
