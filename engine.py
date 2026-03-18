@@ -18,7 +18,7 @@ MAP = [
     [1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,1,0,0,1],
     [1,0,1,1,1,0,1,0,1,1,1,1,1,1,1,0,1,0,1,1,1,1,0,1,1,0,1,0,1,1,0,1],
     [1,0,1,0,0,0,1,0,1,0,0,0,0,0,1,0,1,0,0,0,0,1,0,1,1,0,1,0,0,0,0,1],
-    [1,0,1,0,1,1,1,0,1,0,1,1,1,0,1,0,1,1,1,1,1,1,0,0,0,0,1,0,1,1,0,1],
+    [1,0,1,0,1,1,1,0,1,0,1,1,1,0,1,0,1,1,0,1,1,1,0,0,0,0,1,0,1,1,0,1],
     [1,0,1,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,1,0,1,1,0,1,0,0,1,1,1],
     [1,0,1,1,1,1,1,1,1,0,1,0,1,1,1,1,1,1,1,1,0,1,0,1,1,0,1,1,0,1,0,1],
     [1,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,1],
@@ -136,8 +136,14 @@ class DoomGame:
     
     # 일반 몬스터, 보스 몬스터 생성 순서 정의 코드
     def prepare_stage(self, js_enemy_img, js_boss_img, ammo_img, health_img):
-        # 1. 리스트 초기화
-        self.monsters = []
+        # 1. 리스트 초기화 + 이전 통계 수치 초기화
+        self.score = 0
+        self.monsters_killed = 0
+        self.items_collected = 0
+        self.game_won = False
+        self.win_timer = 0
+
+        self.monsters = [] # 기존 몬스터 배치 비우기
         self.items = [] # 기존 아이템 비우기
         
         # 2. 보스 먼저 생성 및 추가, (x, y) 좌표
@@ -312,7 +318,7 @@ class DoomGame:
             
             if dist < 15: # 습득 범위
                 if item.type == "AMMO":
-                    self.ammo += 10
+                    self.ammo += 20
                 elif item.type == "HEALTH":
                     self.player_health = min(self.MAX_HEALTH, self.player_health + 30)
                 
@@ -427,9 +433,9 @@ class DoomGame:
             dist = math.sqrt(dx**2 + dy**2) # 거리 먼저 계산
 
             # [핵심] 거리에 비례해 조준 범위를 좁힘
-            # 거리가 500px(10타일)일 때 조준 범위가 약 절반으로 줄어듭니다. -> 해당 값이 낮을수록 멀리있는 적 맞추기 어려움.
+            # 거리가 200px(4타일)일 때 조준 범위가 약 절반으로 줄어듭니다. -> 해당 값이 낮을수록 멀리있는 적 맞추기 어려움.
             # 100은 최소 거리 상수로, 너무 가까울 때 분모가 0이 되는 걸 방지합니다.
-            dynamic_tolerance = base_tolerance / (1 + (dist / 400))
+            dynamic_tolerance = base_tolerance / (1 + (dist / 200))
             
             gamma = math.atan2(dy, dx) - self.player_angle
             while gamma < -math.pi: gamma += 2 * math.pi

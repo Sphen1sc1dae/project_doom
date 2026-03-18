@@ -99,6 +99,13 @@
 
         def restart_game(event):
             game.init_game()
+            game.prepare_stage(enemy_img, boss_img, ammo_img, health_img)
+
+            # [추가] 점수판 초기화
+            game.score = 0
+            game.monsters_killed = 0
+            game.items_collected = 0
+            
             ui_container.style.display = "none"
 
         restart_btn.onclick = create_proxy(restart_game)
