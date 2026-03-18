@@ -484,12 +484,15 @@
                     # 최종 등급 (점수에 따른 평가)
                     if game.win_timer >= 90:
                         rank = "SOLDIER"
-                        if game.score > 2500: rank = "DOOM SLAYER"
-                        elif game.score > 1500: rank = "VETERAN"
+                        if game.score > 4000: rank = "DOOM SLAYER"
+                        elif game.score > 3500: rank = "NightMare!"
+                        elif game.score > 3100: rank = "Violence"
+                        elif game.score > 2100: rank = "Hurt Me Plenty"
+                        elif game.score > 1500: rank = "I'm Too Young to Die"
                         
                         ctx.fillStyle = "red"
                         ctx.font = "bold 40px 'Courier New'"
-                        ctx.fillText(f"RANK: {rank}", SCREEN_WIDTH / 2, 480)
+                        ctx.fillText(f"RANK : {rank}", SCREEN_WIDTH / 2, 480)
 
         def main_loop(*args):
             if game.game_state == "PLAYING":
