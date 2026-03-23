@@ -97,8 +97,18 @@
         pressed_keys = set()
         game.prepare_stage(enemy_img, boss_img, ammo_img, health_img)
 
+        <!-- 사격 상태 확인 변수 -->
+        is_shooting = False
+
         def restart_game(event):
             game.init_game()
+            game.prepare_stage(enemy_img, boss_img, ammo_img, health_img)
+
+            # [추가] 점수판 초기화
+            game.score = 0
+            game.monsters_killed = 0
+            game.items_collected = 0
+            
             ui_container.style.display = "none"
 
         restart_btn.onclick = create_proxy(restart_game)
@@ -106,6 +116,9 @@
         def on_keydown(event): pressed_keys.add(event.key.lower())
         def on_keyup(event):
             if event.key.lower() in pressed_keys: pressed_keys.remove(event.key.lower())
+            if event.key.lower() == ' ':
+                global is_shooting
+                is_shooting = False
 
         js.window.addEventListener("keydown", create_proxy(on_keydown))
         js.window.addEventListener("keyup", create_proxy(on_keyup))
@@ -157,68 +170,57 @@
             GRID_SIZE = 16
             # 월드 좌표를 미니맵 크기로 변환하는 비율 (20 / 50 = 0.4)
             WORLD_TO_MM = GRID_SIZE / 50
-
-            <!-- # MM_SCALE = 14 레이더 확대 배율 (숫자가 클수록 더 가까이 보임)
-            
-            # 32x32 맵을 160px 안에 맞추기 위한 스케일 계산
-            # (160 / 32 = 5px)
-            # TILE_W = 160 / len(MAP[0])
-            # TILE_H = 160 / len(MAP) -->
             
             # 플레이어 고정 레이더는 연산량이 많기 때문에 주의.
             p_col = int(game.player_x / 50)
             p_row = int(game.player_y / 50)
-            
-            # 1. 벽 그리기
-            # 성능을 위해 플레이어 주변 타일만 루프를 돌림. (범위 제한)
-            mm_ctx.fillStyle = "rgba(0, 255, 0, 0.25)"
-            render_range = 6 # 주변 6타일까지만 표시 -> 성능 최적화에 필수.
 
+            # 성능을 위해 플레이어 주변 일정 범위만 렌더링
+            render_range = 8
+            
             for r in range(max(0, p_row - render_range), min(len(MAP), p_row + render_range)):
                 for c in range(max(0, p_col - render_range), min(len(MAP[0]), p_col + render_range)):
-                    if MAP[r][c] == 1:
-                        # 플레이어와의 상대적 거리 계산 (상대 좌표 방식)
-                        # 타일의 왼쪽 상단 꼭짓점을 기준으로 플레이어와의 상대 거리를 계산
-                        rel_x = (c * 50) - game.player_x
-                        rel_y = (r * 50) - game.player_y
 
-                        # 타일 한 칸을 정확히 GRID_SIZE 크기로 그림
-                        mm_ctx.fillRect(
-                            rel_x * WORLD_TO_MM, 
-                            rel_y * WORLD_TO_MM, 
-                            GRID_SIZE, 
-                            GRID_SIZE
-                        )
+                    # 상대 좌표 계산
+                    rel_x = (c * 50) - game.player_x
+                    rel_y = (r * 50) - game.player_y
 
-            # 2. 몬스터 표시
+                    # [핵심] 방문 여부 확인
+                    if game.visited[r][c]:
+                        # 방문한 곳: 벽은 밝은 녹색, 바닥은 아주 연한 녹색
+                        if MAP[r][c] == 1:
+                            mm_ctx.fillStyle = "rgba(0, 255, 0, 0.4)" 
+                        else:
+                            mm_ctx.fillStyle = "rgba(0, 255, 0, 0.05)"
+                    else:
+                        # 방문하지 않은 곳: 검은색 안개
+                        mm_ctx.fillStyle = "rgba(0, 0, 0, 1.0)"
+
+                    mm_ctx.fillRect(
+                        rel_x * WORLD_TO_MM, 
+                        rel_y * WORLD_TO_MM, 
+                        GRID_SIZE, 
+                        GRID_SIZE
+                    )
+
+            # 몬스터 표시 (안개 밖에 있을 때만)
             for m in game.monsters:
-                if m.is_alive:
-                    # 몬스터 중심 좌표
-                    rel_mx = m.x - game.player_x
-                    rel_my = m.y - game.player_y
-                    
-                    # 너무 먼 몬스터는 그리지 않음
-                    dist_sq = rel_mx**2 + rel_my**2
-                    
-                    # 레이더 가시거리 내 있는지 확인
-                    if dist_sq < 400**2: 
-                        # 몬스터 점 그리기
+                m_grid_x, m_grid_y = int(m.x / 50), int(m.y / 50)
+                if m.is_alive and game.visited[m_grid_y][m_grid_x]:
+                    rel_mx, rel_my = m.x - game.player_x, m.y - game.player_y
+                    if (rel_mx**2 + rel_my**2) < 500**2: # 레이더 가시거리
                         mm_ctx.fillStyle = "#ff0000"
-                        mm_ctx.strokeStyle = "#fff" # 흰색 외곽선을 주어 벽과 구분
-                        mm_ctx.lineWidth = 1
                         mm_ctx.beginPath()
-
-                        # WORLD_TO_MM 비율을 곱해 정확한 위치에 점을 찍음
                         mm_ctx.arc(rel_mx * WORLD_TO_MM, rel_my * WORLD_TO_MM, 4, 0, math.pi * 2)
                         mm_ctx.fill()
-                        mm_ctx.stroke() # 외곽선 추가로 벽과 겹쳐도 식별 가능하게 함
 
+
+            # 아이템 표시 (안개 밖에 있을 때만)
             for item in game.items:
-                if item.is_active:
-                    rel_ix = item.x - game.player_x
-                    rel_iy = item.y - game.player_y
-                    if (rel_ix**2 + rel_iy**2) < 400**2:
-                        # 아이템 종류에 따라 색상 구분 (총알: 황금색, 체력: 파란색)
+                i_grid_x, i_grid_y = int(item.x / 50), int(item.y / 50)
+                if item.is_active and game.visited[i_grid_y][i_grid_x]:
+                    rel_ix, rel_iy = item.x - game.player_x, item.y - game.player_y
+                    if (rel_ix**2 + rel_iy**2) < 500**2:
                         mm_ctx.fillStyle = "#ffd700" if item.type == "AMMO" else "#00ffff"
                         mm_ctx.beginPath()
                         mm_ctx.arc(rel_ix * WORLD_TO_MM, rel_iy * WORLD_TO_MM, 3, 0, math.pi * 2)
@@ -226,31 +228,19 @@
 
             mm_ctx.restore() # 회전 및 이동 상태 초기화
 
-            # 3. 플레이어 표시 (원형 레이더 내 고정된 중앙 화살표)
+            # 중앙 플레이어 화살표 (고정)
             mm_ctx.save()
             mm_ctx.translate(80, 80)
             mm_ctx.fillStyle = "#0f0"
-            mm_ctx.shadowBlur = 10; mm_ctx.shadowColor = "#0f0"
-
-            # 위를 향하는 삼각형 (플레이어 표시)
             mm_ctx.beginPath()
-            mm_ctx.moveTo(0, -7)
-            mm_ctx.lineTo(-5, 5)
-            mm_ctx.lineTo(5, 5)
-            mm_ctx.closePath()
-            mm_ctx.fill()
+            mm_ctx.moveTo(0, -7); mm_ctx.lineTo(-5, 5); mm_ctx.lineTo(5, 5)
+            mm_ctx.closePath(); mm_ctx.fill()
             mm_ctx.restore()
 
-            # 4. 레이더 격자선 + 스캔 효과
+            # 레이더 UI 가이드 라인
             mm_ctx.strokeStyle = "rgba(0, 255, 0, 0.2)"
             mm_ctx.beginPath()
-            mm_ctx.arc(80, 80, 40, 0, math.pi * 2) # 내부 동심원
-            mm_ctx.stroke()
-
-            mm_ctx.beginPath()
-            mm_ctx.moveTo(80, 0); mm_ctx.lineTo(80, 160)
-            mm_ctx.moveTo(0, 80); mm_ctx.lineTo(160, 80)
-            mm_ctx.stroke()
+            mm_ctx.arc(80, 80, 40, 0, math.pi * 2); mm_ctx.stroke()
 
         def draw_scene():
             <!-- # Z-Buffer 및 화면 초기화 (최상단) -->
@@ -495,16 +485,23 @@
                         ctx.fillText(f"RANK : {rank}", SCREEN_WIDTH / 2, 480)
 
         def main_loop(*args):
+            global is_shooting
             if game.game_state == "PLAYING":
                 game.update_player(pressed_keys)
+                
                 if ' ' in pressed_keys:
-                    pressed_keys.remove(' ')
-                    if not game.ammo:
-                        game.flash_frames = 0
-                        print("No Ammo!")
-                    else:
-                        game.flash_frames = 5
-                    game.attack_monster()
+                    # pressed_keys.remove(' ')
+                    if not is_shooting:
+                        if not game.ammo:
+                            game.flash_frames = 0
+                            print("No Ammo!")
+                        else:
+                            game.flash_frames = 5
+                        game.attack_monster()
+                        is_shooting = True
+                else:
+                    # 스페이스바를 떼면 다시 사격 가능 상태로 리셋
+                    is_shooting = False
                 game.update_items()
             draw_scene()
             js.requestAnimationFrame(create_proxy(main_loop))
