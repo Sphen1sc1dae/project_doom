@@ -176,17 +176,6 @@ class DoomGame:
         self.ammo = 20  # 총알 개수 초기 설정 (예: 20발)
         self.rot_speed = 0.06 # 플레이어 회전 속도 변수.
         self.move_speed = 2 # 플레이어 속도 변수. 해상도가 높다면 속도도 높일 것.
-        # self.monsters = [
-        #     Monster(175, 170), Monster(320, 80),
-        #     Monster(310, 280), Monster(75, 250) 
-        # ]
-
-        # 직접 좌표를 입력하는 대신 랜덤 함수 호출(n = 생성 몬스터 수)
-        # self.spawn_monsters_randomly(14)
-
-        #아이템 생성 초기화 부
-        # self.items = []
-        # # self.spawn_items_randomly(10) # 총 생성 아이템 개수
 
         self.damage_frames = 0
         self.damage_cooldown = 0

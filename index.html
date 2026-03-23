@@ -321,8 +321,11 @@
                 # Z-Buffer 체크: 벽에 가려지는지 확인
                 if 0 <= idx < SCREEN_WIDTH:
                     if z_buffer[idx] > s["dist"]:
-                    <!-- # 타입에 따라 기본 크기(Scale) 분기. 아이템 크기 조절
-                    # 기존 40이었던 값을 ITEM일 때만 20~25 정도로 낮춥니다. -->
+                        <!-- # 이미지 기본 비율을 1:1로 설정 -->
+                        sprite_aspect_ratio = 1.0
+
+                        <!-- # 타입에 따라 기본 크기(Scale) 분기. 아이템 크기 조절
+                        # 기존 40이었던 값을 ITEM일 때만 20~25 정도로 낮춥니다. -->
                         if s["type"] == "ITEM":
                             sprite_scale = 20 # 숫자가 작을수록 아이템이 작아집니다
                             <!-- # bobbing 효과. math.sin(time.time() * float_speed) * float_height. -->
@@ -331,6 +334,7 @@
                         elif s["type"] == "BOSS": # [추가] 보스 몬스터 분기
                             sprite_scale = 80    # 일반 몬스터(40)보다 2배 큼
                             y_offset = 20        # 크기가 커진 만큼 위로 살짝 올려서 발을 맞춤
+                            sprite_aspect_ratio = 0.75 # 숫자가 1.0 보다 크면 가로가 넓어지고, 작으면 세로가 넓어짐.
                         else: # 일반 몬스터 (MONSTER)
                             sprite_scale = 40 # 일반 몬스터는 기존 크기 유지
                             y_offset = 20             
@@ -352,14 +356,21 @@
                             # 이미지가 그려질 위치에 빨간색 필터 씌우기
                             ctx.filter = "brightness(40%) sepia(100%) saturate(2000%) hue-rotate(-50deg)"
 
+                        # 기본 크기 계산
+                        base_size = (SCREEN_HEIGHT / s["dist"]) * sprite_scale
+
+                        # [핵심] 비율을 적용하여 가로/세로 크기 분리 계산
+                        sprite_width = base_size * sprite_aspect_ratio
+                        sprite_height = base_size
+
                         # 이미지 그리기
                         if s["img"]:
                             ctx.drawImage(
                                 s["img"], 
-                                screen_x - sprite_size / 2, 
-                                (SCREEN_HEIGHT / 2) - sprite_size / 2 + y_offset, # 아이템과 바닥으로부터의 거리
-                                sprite_size, 
-                                sprite_size
+                                screen_x - sprite_width / 2, 
+                                (SCREEN_HEIGHT / 2) - sprite_height / 2 + y_offset, # 아이템과 바닥으로부터의 거리
+                                sprite_width, 
+                                sprite_height
                             )
                         
                         if is_flashing:
