@@ -174,7 +174,7 @@ class DoomGame:
         self.player_angle = 0
         self.player_health = self.MAX_HEALTH # 시작 시 풀 피(100)
         self.ammo = 20  # 총알 개수 초기 설정 (예: 20발)
-        self.rot_speed = 0.06 # 플레이어 회전 속도 변수.
+        self.rot_speed = 0.05 # 플레이어 회전 속도 변수.
         self.move_speed = 2 # 플레이어 속도 변수. 해상도가 높다면 속도도 높일 것.
 
         self.damage_frames = 0
@@ -252,27 +252,27 @@ class DoomGame:
     def update_monsters(self):
         for m in self.monsters:
             if not m.is_alive: continue
+            # 플레이어와 몬스터 사이 거리계산
             dx, dy = self.player_x - m.x, self.player_y - m.y
             dist_sq = dx**2 + dy**2 # 무거운 루트 연산 대신 제곱 연산 사용
 
+            # 몬스터의 가시거리 설정(제곱 연산으로 최적화를 시켰으므로 조건문에 들어가는 dist 변수도 제곱값 비교) 해당 수치를 조정해서 난이도에 영향을 줄 수 있다(가시거리가 높을수록 더 까다로운 몬스터).
+            # 200 ~ 300 사이가 적당한듯.
+            view_dist = 230
             # 1. 시야 및 경계 상태 체크
             if not m.is_alert:
-                # 몬스터의 가시거리 설정(제곱 연산으로 최적화를 시켰으므로 조건문에 들어가는 dist 변수도 제곱값 비교) 해당 수치를 조정해서 난이도에 영향을 줄 수 있다(가시거리가 높을수록 더 까다로운 몬스터).
-                # 200 ~ 300 사이가 적당한듯.
-                view_dist = 230
                 if dist_sq < view_dist**2:
                     # 플레이어와 몬스터 사이에 벽이 없는지 확인
                     if self.is_line_of_sight_clear(m.x, m.y):
                         m.is_alert = True # 플레이어 발견
                         print("Monster alerted!")
 
-            # 2. 발견한 상태일 때만 추격 로직 실행. 해당 로직은 한 번 발각되면 끝까지 추격함.
+            # 2. 발견한 상태일 때만 추격 로직 실행.
             if m.is_alert:
-                # 실제 이동을 위해 정확한 거리(루트) 계산 (한 번만 수행)
-                dist = math.sqrt(dist_sq)
-
                 # mx, my를 미리 0으로 초기화하여 에러 방지
                 mx, my = 0, 0
+                # 실제 이동을 위해 정확한 거리(루트) 계산 (한 번만 수행)
+                dist = math.sqrt(dist_sq)
                 
                 # 플레이어와 겹치지 않게 일정 거리(35px) 유지
                 if dist > 30:
@@ -294,6 +294,10 @@ class DoomGame:
                 margin_y = m_margin if my > 0 else -m_margin
                 if self.get_map_at(m.x, m.y + my + margin_y) == 0:
                     m.y += my
+                
+                # 시야각 보다 멀어지면 추격 중지
+                if dist > view_dist:
+                    m.is_alert = False
 
             # 3. 플레이어 피격 판정 (매우 가까울 때만)
             if dist_sq < 901: # 30의 제곱 -> 몬스터의 marzin값 고려하여 거리가 너무 가까운 것 같으면 값 증가
@@ -327,34 +331,67 @@ class DoomGame:
                 self.items_collected += 1
 
     def cast_rays(self):
-        """DDA 알고리즘을 적용한 고성능 레이캐스팅 -> DDA 생략하고 정밀도를 더 높인 레이캐스팅"""
-        ray_angle = self.player_angle - HALF_FOV
+        """ DDA 알고리즘을 적용하여 레이캐스팅 성능 향상 """
         wall_data = []
 
         for i in range(CASTED_RAYS):
+            ray_angle = (self.player_angle - HALF_FOV) + (i * STEP_ANGLE)
             sin_a = math.sin(ray_angle)
             cos_a = math.cos(ray_angle)
             
-            dist = MAX_DEPTH
-            # 스텝을 1로 복구하여 계단 현상 제거 (정밀도 향상)
-            # 대신 range 범위를 최적화하여 연산량을 조절합니다.
-            for depth in range(1, MAX_DEPTH, 1): 
-                target_x = self.player_x + cos_a * depth
-                target_y = self.player_y + sin_a * depth
-                
-                # 맵 경계 안쪽인지 먼저 확인 (성능 최적화)
-                col, row = int(target_x / TILE_SIZE), int(target_y / TILE_SIZE)
-                if 0 <= row < len(MAP) and 0 <= col < len(MAP[0]):
-                    if MAP[row][col] == 1:
-                        # 어안렌즈 왜곡 보정
-                        dist = depth * math.cos(self.player_angle - ray_angle)
-                        break
-                else:
-                    break # 맵 밖으로 나가면 중단
+            # DDA 초기 설정
+            x, y = self.player_x, self.player_y
+            map_x, map_y = int(x / TILE_SIZE), int(y / TILE_SIZE)
+
+            delta_dist_x = abs(1 / cos_a) if cos_a != 0 else 1e30
+            delta_dist_y = abs(1 / sin_a) if sin_a != 0 else 1e30
             
-            h = (TILE_SIZE * WALL_HEIGHT_FACTOR) / (dist + 0.1)
-            wall_data.append({'height': h, 'dist': dist})
-            ray_angle += STEP_ANGLE
+            if cos_a < 0:
+                step_x = -1
+                side_dist_x = (x / TILE_SIZE - map_x) * delta_dist_x
+            else:
+                step_x = 1
+                side_dist_x = (map_x + 1.0 - x / TILE_SIZE) * delta_dist_x
+
+            if sin_a < 0:
+                step_y = -1
+                side_dist_y = (y / TILE_SIZE - map_y) * delta_dist_y
+            else:
+                step_y = 1
+                side_dist_y = (map_y + 1.0 - y / TILE_SIZE) * delta_dist_y
+            
+            # 벽 충돌 체크 루프
+            hit = False
+            side = 0
+            for _ in range(50): # 최대 50타일까지만 검사
+                if side_dist_x < side_dist_y:
+                    side_dist_x += delta_dist_x
+                    map_x += step_x
+                    side = 0
+                else:
+                    side_dist_y += delta_dist_y
+                    map_y += step_y
+                    side = 1
+                
+                if 0 <= map_y < 32 and 0 <= map_x < 32:
+                    if MAP[map_y][map_x] == 1:
+                        hit = True
+                        break
+                else: break
+
+            dist = MAX_DEPTH
+            if hit:
+                # [핵심] 수직 거리 계산
+                if side == 0: dist = (side_dist_x - delta_dist_x)
+                else: dist = (side_dist_y - delta_dist_y)
+
+                # 어안렌즈 보정 (각도 차이 적용)
+                dist *= math.cos(self.player_angle - ray_angle)
+                # 최종 실제 거리 변환
+                dist *= TILE_SIZE
+
+            h = (TILE_SIZE * WALL_HEIGHT_FACTOR) / (max(dist, 0.1))
+            wall_data.append({'height': h, 'dist': dist, 'side': side})
             
         return wall_data
 

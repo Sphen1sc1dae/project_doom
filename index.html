@@ -66,27 +66,30 @@
         from pyodide.ffi import create_proxy
         from engine import DoomGame, SCREEN_WIDTH, SCREEN_HEIGHT, CASTED_RAYS, MAP, FOV, MAX_DEPTH
 
-        # 전역 객체 초기화
+        <!-- # [최적화] Z-Buffer 전역 객체화 (매번 생성 방지) -->
+        z_buffer = [MAX_DEPTH] * SCREEN_WIDTH
+        
+        <!-- # 전역 객체 초기화 -->
         ui_container = js.document.getElementById("ui-container")
         status_text = js.document.getElementById("status-text")
         restart_btn = js.document.getElementById("restart-btn")
         canvas = js.document.getElementById("gameCanvas")
         ctx = canvas.getContext("2d")
         
-        # 미니맵 관련 객체
+        <!-- # 미니맵 관련 객체 -->
         mm_canvas = js.document.getElementById("minimapCanvas")
         mm_ctx = mm_canvas.getContext("2d")
         
-        # 이미지 로드 (캐싱)
-        <!-- # monster_img = js.Image.new()
+        <!-- # 이미지 로드 (캐싱)
+        # monster_img = js.Image.new()
         # monster_img.src = "images/doom_imp.png" -->
         weapon_img = js.Image.new()
         weapon_img.src = "images/pistol.png"
 
         enemy_img = js.Image.new()
-        enemy_img.src = "images/doom_imp.png"  # 일반 몬스터 이미지 경로
+        enemy_img.src = "images/doom_imp.png"  <!-- # 일반 몬스터 이미지 경로 -->
         boss_img = js.Image.new()
-        boss_img.src = "images/boss.png"     # 보스 몬스터 이미지 경로
+        boss_img.src = "images/boss.png"     <!-- # 보스 몬스터 이미지 경로 -->
 
         health_img = js.Image.new()
         health_img.src = "images/health.png"
@@ -97,14 +100,14 @@
         pressed_keys = set()
         game.prepare_stage(enemy_img, boss_img, ammo_img, health_img)
 
-        <!-- 사격 상태 확인 변수 -->
+        <!-- # 사격 상태 확인 변수 -->
         is_shooting = False
 
         def restart_game(event):
             game.init_game()
             game.prepare_stage(enemy_img, boss_img, ammo_img, health_img)
 
-            # [추가] 점수판 초기화
+            <!-- # 점수판 초기화 -->
             game.score = 0
             game.monsters_killed = 0
             game.items_collected = 0
@@ -127,19 +130,19 @@
             """몬스터와 아이템을 모두 합쳐서 거리순으로 정렬하기 위한 리스트 생성"""
             sprites = []
             
-            # 1. 활성화된 몬스터 추가
+            <!-- # 1. 활성화된 몬스터 추가 -->
             for m in game.monsters:
                 if m.is_alive:
                     sprites.append({
                         "x": m.x, "y": m.y, 
-                        # 객체 생성 시 주입된 개별 이미지(bossImg 또는 enemyImg) 사용
+                        <!-- # 객체 생성 시 주입된 개별 이미지(bossImg 또는 enemyImg) 사용 -->
                         "img": m.img, 
-                        # 객체 생성 시 설정된 타입 사용
-                        "type": m.type,  # "BOSS" 또는 "MONSTER"
+                        <!-- # 객체 생성 시 설정된 타입 사용 -->
+                        "type": m.type,  <!-- # "BOSS" 또는 "MONSTER" -->
                         "ref" : m
                     })
             
-            # 2. 활성화된 아이템 추가
+            <!-- # 2. 활성화된 아이템 추가 -->
             for item in game.items:
                 if item.is_active:
                     sprites.append({
@@ -151,240 +154,179 @@
             return sprites
 
         def draw_minimap():
-            # 미니맵 캔버스 초기화 + 원형 마스킹 설정
+            <!-- # 미니맵 캔버스 초기화 + 원형 마스킹 설정 -->
             mm_ctx.clearRect(0, 0, 160, 160)
-            mm_ctx.save() # 현재 상태 저장
-            mm_ctx.translate(80, 80) # 캔버스 중심을 레이더 중앙으로 이동
+            mm_ctx.save() <!-- # 현재 상태 저장 -->
+            mm_ctx.translate(80, 80) <!-- # 캔버스 중심을 레이더 중앙으로 이동 -->
 
             mm_ctx.beginPath()
             mm_ctx.arc(0, 0, 80, 0, math.pi * 2) # 중앙(80,80)에 반지름 80인 원 생성. 레이더 중심에 플레이어 고정.
             mm_ctx.clip() # 이후 그려지는 모든 것은 이 원 안으로 제한됨 = 기본 사각형 미니맵을 원형으로 자름
 
-            # 레이더 회전 설정
+            <!-- # 레이더 회전 설정
             # 플레이어가 보는 방향이 항상 '위쪽'이 되도록 지도를 반대로 회전시킵니다.
-            # 플레이어 아이콘을 고정 한 채, 움직이는 방향에 따라 지도를 회전시킬 수 있다.
+            # 플레이어 아이콘을 고정 한 채, 움직이는 방향에 따라 지도를 회전시킬 수 있다. -->
             mm_ctx.rotate(-game.player_angle - math.pi/2)
 
-            # 핵심: 실제 타일 1개(50px)가 미니맵에서 가질 크기 (예: 20px)
-            # 이 값을 고정하면 계산이 훨씬 정확해집니다.
+            <!-- # 핵심: 실제 타일 1개(50px)가 미니맵에서 가질 크기 (예: 20px)
+            # 이 값을 고정하면 계산이 훨씬 정확해집니다. -->
             GRID_SIZE = 16
-            # 월드 좌표를 미니맵 크기로 변환하는 비율 (20 / 50 = 0.4)
+            <!-- # 월드 좌표를 미니맵 크기로 변환하는 비율 (20 / 50 = 0.4) -->
             WORLD_TO_MM = GRID_SIZE / 50
             
-            # 플레이어 고정 레이더는 연산량이 많기 때문에 주의.
+            <!-- # 플레이어 고정 레이더는 연산량이 많기 때문에 주의. -->
             p_col = int(game.player_x / 50)
             p_row = int(game.player_y / 50)
 
-            # 성능을 위해 플레이어 주변 일정 범위만 렌더링
-            render_range = 8
+            <!-- # 성능을 위해 플레이어 주변 일정 범위만 렌더링 8 -> 7 로 하나 낮춤 -->
+            render_range = 7
             
-            for r in range(max(0, p_row - render_range), min(len(MAP), p_row + render_range)):
-                for c in range(max(0, p_col - render_range), min(len(MAP[0]), p_col + render_range)):
+            for r in range(max(0, p_row - render_range), min(32, p_row + render_range)):
+                for c in range(max(0, p_col - render_range), min(32, p_col + render_range)):
 
-                    # 상대 좌표 계산
-                    rel_x = (c * 50) - game.player_x
-                    rel_y = (r * 50) - game.player_y
-
-                    # [핵심] 방문 여부 확인
-                    if game.visited[r][c]:
-                        # 방문한 곳: 벽은 밝은 녹색, 바닥은 아주 연한 녹색
-                        if MAP[r][c] == 1:
-                            mm_ctx.fillStyle = "rgba(0, 255, 0, 0.4)" 
-                        else:
-                            mm_ctx.fillStyle = "rgba(0, 255, 0, 0.05)"
+                    <!-- # [핵심] 방문 여부 확인 -->
+                    if not game.visited[r][c]:
+                        mm_ctx.fillStyle = "#000"
+                    elif MAP[r][c] == 1:
+                        <!-- # 방문한 곳: 벽은 밝은 녹색, 바닥은 아주 연한 녹색 -->
+                        mm_ctx.fillStyle = "rgba(0, 255, 0, 0.6)"
                     else:
-                        # 방문하지 않은 곳: 검은색 안개
-                        mm_ctx.fillStyle = "rgba(0, 0, 0, 1.0)"
+                        mm_ctx.fillStyle = "rgba(0, 255, 0, 0.05)"
 
                     mm_ctx.fillRect(
-                        rel_x * WORLD_TO_MM, 
-                        rel_y * WORLD_TO_MM, 
+                        (c*50 - game.player_x) * WORLD_TO_MM, 
+                        (r*50 - game.player_y) * WORLD_TO_MM, 
                         GRID_SIZE, 
                         GRID_SIZE
                     )
 
-            # 몬스터 표시 (안개 밖에 있을 때만)
+            <!-- # 몬스터 표시 (안개 밖에 있을 때만) -->
             for m in game.monsters:
                 m_grid_x, m_grid_y = int(m.x / 50), int(m.y / 50)
                 if m.is_alive and game.visited[m_grid_y][m_grid_x]:
-                    rel_mx, rel_my = m.x - game.player_x, m.y - game.player_y
-                    if (rel_mx**2 + rel_my**2) < 500**2: # 레이더 가시거리
-                        mm_ctx.fillStyle = "#ff0000"
-                        mm_ctx.beginPath()
-                        mm_ctx.arc(rel_mx * WORLD_TO_MM, rel_my * WORLD_TO_MM, 4, 0, math.pi * 2)
-                        mm_ctx.fill()
+                    rel_mx, rel_my = (m.x - game.player_x) * WORLD_TO_MM, (m.y - game.player_y) * WORLD_TO_MM
+                    mm_ctx.fillStyle = "#ff0000"
+                    mm_ctx.beginPath()
+                    mm_ctx.arc(rel_mx, rel_my, 3, 0, math.pi * 2)
+                    mm_ctx.fill()
 
-
-            # 아이템 표시 (안개 밖에 있을 때만)
+            <!-- # 아이템 표시 (안개 밖에 있을 때만) -->
             for item in game.items:
                 i_grid_x, i_grid_y = int(item.x / 50), int(item.y / 50)
                 if item.is_active and game.visited[i_grid_y][i_grid_x]:
-                    rel_ix, rel_iy = item.x - game.player_x, item.y - game.player_y
-                    if (rel_ix**2 + rel_iy**2) < 500**2:
-                        mm_ctx.fillStyle = "#ffd700" if item.type == "AMMO" else "#00ffff"
-                        mm_ctx.beginPath()
-                        mm_ctx.arc(rel_ix * WORLD_TO_MM, rel_iy * WORLD_TO_MM, 3, 0, math.pi * 2)
-                        mm_ctx.fill()
+                    rel_ix, rel_iy = (item.x - game.player_x) * WORLD_TO_MM, (item.y - game.player_y) * WORLD_TO_MM
+                    mm_ctx.fillStyle = "#ffd700" if item.type == "AMMO" else "#00ffff"
+                    mm_ctx.beginPath()
+                    mm_ctx.arc(rel_ix, rel_iy, 3, 0, math.pi * 2)
+                    mm_ctx.fill()
 
-            mm_ctx.restore() # 회전 및 이동 상태 초기화
+            mm_ctx.restore() <!-- # 회전 및 이동 상태 초기화 -->
 
-            # 중앙 플레이어 화살표 (고정)
-            mm_ctx.save()
-            mm_ctx.translate(80, 80)
+            <!-- # 플레이어 화살표 (고정 위치이므로 rotate 밖에서 그림) -->
             mm_ctx.fillStyle = "#0f0"
             mm_ctx.beginPath()
-            mm_ctx.moveTo(0, -7); mm_ctx.lineTo(-5, 5); mm_ctx.lineTo(5, 5)
-            mm_ctx.closePath(); mm_ctx.fill()
-            mm_ctx.restore()
-
-            # 레이더 UI 가이드 라인
-            mm_ctx.strokeStyle = "rgba(0, 255, 0, 0.2)"
-            mm_ctx.beginPath()
-            mm_ctx.arc(80, 80, 40, 0, math.pi * 2); mm_ctx.stroke()
+            mm_ctx.moveTo(80, 73); mm_ctx.lineTo(76, 85); mm_ctx.lineTo(84, 85)
+            mm_ctx.fill()
 
         def draw_scene():
-            <!-- # Z-Buffer 및 화면 초기화 (최상단) -->
+            <!-- # Z-Buffer 및 화면 초기화 [최적화](새 리스트 생성 대신 값 채우기) -->
             global z_buffer
-            z_buffer = [MAX_DEPTH] * SCREEN_WIDTH            
+            for i in range(SCREEN_WIDTH): z_buffer[i] = MAX_DEPTH            
 
-            # 1. 배경 (그라데이션 효과 대신 단순화하여 성능 확보)
+            <!-- # 1. 배경 (그라데이션 효과 대신 단순화하여 성능 확보) -->
             ctx.fillStyle = "#1a1a1a" # 천장
-            ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT // 2)
+            ctx.fillRect(0, 0, SCREEN_WIDTH, 300)
             ctx.fillStyle = "#333" # 바닥
-            ctx.fillRect(0, SCREEN_HEIGHT // 2, SCREEN_WIDTH, SCREEN_HEIGHT // 2)
+            ctx.fillRect(0, 300, SCREEN_WIDTH, 300)
 
-            # 2. 레이캐스팅 벽 렌더링
+            <!-- # 2. 레이캐스팅 벽 렌더링 (DDA 결과 사용) -->
             wall_results = game.cast_rays()
-            
-            # 소수점 오차를 줄이기 위해 정확한 폭 계산
-            ray_step = SCREEN_WIDTH / CASTED_RAYS
+            ray_width = SCREEN_WIDTH / CASTED_RAYS
             
             for i, wall in enumerate(wall_results):
                 dist = wall['dist']
                 h = wall['height']
+                side = wall['side']
 
-                <!-- # 하나의 광선(ray)이 차지하는 화면 폭만큼 z_buffer를 채워줍니다. -->
-                start_x = int(i * ray_step)
-                end_x = int((i + 1) * ray_step)
+                <!-- # 시작 X 좌표를 소수점까지 계산 후 반올림하여 틈새 제거 -->
+                start_x = i * ray_width
 
-                <!-- # z_buffer 계산 -->
-                for x in range(start_x, min(end_x, SCREEN_WIDTH)):
-                    z_buffer[x] = dist
+                <!-- # Z-Buffer 기록 (현재 광선이 담당하는 모든 픽셀 구간에 거리 저장) -->
+                for x in range(int(start_x), int(start_x + ray_width + 0.5)):
+                    if x < SCREEN_WIDTH:
+                        z_buffer[x] = dist
                 
-                # 거리에 따른 그림자 효과
+                <!-- # 거리에 따른 그림자 효과 -->
                 shade = min(180, dist * 0.4)
-                color = int(200 - shade)
+                color = int(max(50, 255 - shade))
+
+                <!-- # Y축 벽(side=1)은 X축 벽보다 조금 더 어둡게 설정하여 입체감 부여 -->
+                if side == 1:
+                    color = int(color * 0.7)
+
                 ctx.fillStyle = f"rgb({color}, {color}, {color})"
 
-                # 핵심: ray_width에 +1.2 정도를 더해 인접한 벽끼리 미세하게 겹치게 하여 
-                # 계단 현상과 흰 선(틈새)을 동시에 방지 -> 픽셀이 겹치도록 보정
-                ctx.fillRect(i * ray_step - 0.5, (SCREEN_HEIGHT - h) // 2, ray_step + 1.2, h)
-
-            # 3. 몬스터 + 아이템 렌더링 (Z-Buffer 최적화 검사)
-            all_sprites = get_all_sprites()
-            sprite_data = []
+                <!-- # 핵심: ray_width에 +1 정도를 더해 인접한 벽끼리 미세하게 겹치게 하여 
+                # 계단 현상과 흰 선(틈새)을 동시에 방지 -> 픽셀이 겹치도록 보정 -->
+                ctx.fillRect(start_x, (600 - h) / 2, ray_width + 1.0, h)
+            
+            <!-- # 3. 스프라이트 (몬스터/아이템) 렌더링 -->
+            sprites = []
+            for m in game.monsters:
+                if m.is_alive: sprites.append(m)
+            for item in game.items:
+                if item.is_active: sprites.append(item)
 
             <!-- # z_buffer 유효성 검사 만약 해당 값이 1600 에 고정된다면 거리값 계산 문제 ! print(z_buffer[512]) -->
 
-            for s in all_sprites:
-                dx = s["x"] - game.player_x
-                dy = s["y"] - game.player_y
+            <!-- # 거리에 따라 정렬 (람다 최적화. 먼 것부터 그려야 함) -->
+            sprites.sort(key=lambda s: (s.x - game.player_x)**2 + (s.y - game.player_y)**2, reverse=True)
+
+            for s in sprites:
+                dx, dy = s.x - game.player_x, s.y - game.player_y
                 dist = math.sqrt(dx**2 + dy**2)
-                
-                # 플레이어 앞쪽에 있는지 확인 (단순 거리 컷오프)
-                if dist < 20: continue 
+                if dist < 10: continue
 
-                # 상대 각도 계산
-                sprite_angle = math.atan2(dy, dx) - game.player_angle
-                # 각도 정규화
-                while sprite_angle > math.pi: sprite_angle -= 2 * math.pi
-                while sprite_angle < -math.pi: sprite_angle += 2 * math.pi
+                angle = math.atan2(dy, dx) - game.player_angle
+                while angle > math.pi: angle -= 2 * math.pi
+                while angle < -math.pi: angle += 2 * math.pi
 
-                if abs(sprite_angle) < 1.2: # 시야각(FOV) 내에 있을 때만
-                    sprite_data.append({
-                        "dist": dist,
-                        "angle": sprite_angle,
-                        "img": s["img"],
-                        "type": s["type"],
-                        "ref" : s["ref"]
-                    })
+                if abs(angle) < 1.0:
+                    screen_x = (0.5 * (angle / (FOV / 2)) + 0.5) * SCREEN_WIDTH
+                    idx = int(screen_x)
+                    
+                    if 0 <= idx < SCREEN_WIDTH and z_buffer[idx] > dist:
+                        <!-- # 타입별 설정(변수 할당 최소화) ratio = 이미지 비율, scale = 이미지 크기, offset = 바닥으로부터의 높이 -->
+                        ratio, scale, offset = 1.0, 40, 20 <!-- # 세로가 넓어짐 < 1.0 (ratio) < 가로가 넓어짐 -->
+                        if getattr(s, 'type', '') == "BOSS":
+                            scale, offset, ratio = 80, 20, 0.75
+                        elif getattr(s, 'type', '') == "AMMO" or getattr(s, 'type', '') == "HEALTH":
+                            scale, offset = 18, 50 + math.sin(time.time()*5)*10
+                            <!-- # 아이템 bobbing 효과. math.sin(time.time() * float_speed) * float_height. -->
 
-            # 거리에 따라 정렬 (먼 것부터 그려야 함)
-            sprite_data.sort(key=lambda x: x["dist"], reverse=True)
-
-            for s in sprite_data:
-                # 렌더링 위치 및 크기 계산 (몬스터 로직과 동일)
-                screen_x = (0.5 * (s["angle"] / (FOV / 2)) + 0.5) * SCREEN_WIDTH
-                idx = int(screen_x)
-
-                # [핵심] 인덱스가 화면 가로 폭(0 ~ SCREEN_WIDTH-1) 안에 있는지 엄격히 체크
-                # Z-Buffer 체크: 벽에 가려지는지 확인
-                if 0 <= idx < SCREEN_WIDTH:
-                    if z_buffer[idx] > s["dist"]:
-                        <!-- # 이미지 기본 비율을 1:1로 설정 -->
-                        sprite_aspect_ratio = 1.0
-
-                        <!-- # 타입에 따라 기본 크기(Scale) 분기. 아이템 크기 조절
-                        # 기존 40이었던 값을 ITEM일 때만 20~25 정도로 낮춥니다. -->
-                        if s["type"] == "ITEM":
-                            sprite_scale = 20 # 숫자가 작을수록 아이템이 작아집니다
-                            <!-- # bobbing 효과. math.sin(time.time() * float_speed) * float_height. -->
-                            bobbing = math.sin(time.time() * 5) * 10
-                            y_offset = 50 + bobbing # 아이템이 작아진 만큼 바닥에 붙이려면 이 값을 키우세요
-                        elif s["type"] == "BOSS": # [추가] 보스 몬스터 분기
-                            sprite_scale = 80    # 일반 몬스터(40)보다 2배 큼
-                            y_offset = 20        # 크기가 커진 만큼 위로 살짝 올려서 발을 맞춤
-                            sprite_aspect_ratio = 0.75 # 숫자가 1.0 보다 크면 가로가 넓어지고, 작으면 세로가 넓어짐.
-                        else: # 일반 몬스터 (MONSTER)
-                            sprite_scale = 40 # 일반 몬스터는 기존 크기 유지
-                            y_offset = 20             
-
-                        sprite_size = (SCREEN_HEIGHT / s["dist"]) * sprite_scale
-
-                        is_flashing = False
-                        # 현재 렌더링 중인 스프라이트가 몬스터라면 실제 객체를 찾아 타이머 확인
-                        # s["ref"]를 통해 직접 몬스터 객체에 접근
-                        target_obj = s.get("ref")
-                        if target_obj and hasattr(target_obj, "flash_timer"):
-                            if target_obj.flash_timer > 0:
-                                is_flashing = True
-                                target_obj.flash_timer -= 1
-
-                        if is_flashing:
-                            # 1. 몬스터 모양대로 실루엣 만들기 위해 임시 캔버스 역할을 하는 효과 적용
-                            ctx.save()
-                            # 이미지가 그려질 위치에 빨간색 필터 씌우기
-                            ctx.filter = "brightness(40%) sepia(100%) saturate(2000%) hue-rotate(-50deg)"
-
-                        # 기본 크기 계산
-                        base_size = (SCREEN_HEIGHT / s["dist"]) * sprite_scale
-
-                        # [핵심] 비율을 적용하여 가로/세로 크기 분리 계산
-                        sprite_width = base_size * sprite_aspect_ratio
-                        sprite_height = base_size
-
-                        # 이미지 그리기
-                        if s["img"]:
-                            ctx.drawImage(
-                                s["img"], 
-                                screen_x - sprite_width / 2, 
-                                (SCREEN_HEIGHT / 2) - sprite_height / 2 + y_offset, # 아이템과 바닥으로부터의 거리
-                                sprite_width, 
-                                sprite_height
-                            )
+                        s_size = (SCREEN_HEIGHT / dist) * scale
+                        sw, sh = s_size * ratio, s_size
                         
-                        if is_flashing:
+                        <!-- # 피격 효과 처리 -->
+                        if hasattr(s, 'flash_timer') and s.flash_timer > 0:
+                            ctx.save()
+                            <!-- # 몬스터 피격시 화면 연출 -->
+                            ctx.filter = "brightness(40%) sepia(100%) saturate(2000%) hue-rotate(-50deg)"
+                            ctx.drawImage(s.img, screen_x - sw/2, 300 - sh/2 + offset, sw, sh)
                             ctx.restore()
+                            s.flash_timer -= 1
+                        else:
+                            ctx.drawImage(s.img, screen_x - sw/2, 300 - sh/2 + offset, sw, sh)
                 
 
-            # 4. 조준점
+            <!-- # 4. 조준점 -->
             ctx.strokeStyle = "#0f0"; ctx.lineWidth = 2
             ctx.beginPath()
             ctx.moveTo(SCREEN_WIDTH/2-10, SCREEN_HEIGHT/2); ctx.lineTo(SCREEN_WIDTH/2+10, SCREEN_HEIGHT/2)
             ctx.moveTo(SCREEN_WIDTH/2, SCREEN_HEIGHT/2-10); ctx.lineTo(SCREEN_WIDTH/2, SCREEN_HEIGHT/2+10)
             ctx.stroke()
 
-            # 4-1. 총알 부족 메시지 (조준점 바로 위 배치)
+            <!-- # 4-1. 총알 부족 메시지 (조준점 바로 위 배치) -->
             if game.ammo <= 0:
                 ctx.fillStyle = "#ff0000" # 붉은색 경고
                 ctx.font = "bold 20px Arial"
@@ -392,7 +334,7 @@
                 # 조준점 중앙(SCREEN_WIDTH/2)에서 약간 위(SCREEN_HEIGHT/2 - 20)에 배치
                 ctx.fillText("NO AMMO", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 25)
 
-            # 5. 무기 & 뷰 보빙
+            <!-- # 5. 무기 & 뷰 보빙 -->
             if weapon_img.complete:
                 recoil = game.flash_frames * 12
                 bob_y = math.sin(game.walk_timer) * 10
@@ -406,15 +348,15 @@
                     SCREEN_HEIGHT - w_h + 20 + recoil + bob_y, 
                     w_w, w_h)
 
-            # 6. UI (텍스트)
-            # 체력 수치 백분율 계산
+            <!-- # 6. UI (텍스트)
+            # 체력 수치 백분율 계산 -->
             health_percent = int((game.player_health / game.MAX_HEALTH) * 100)
             
-            # 체력 수치 표시
+            <!-- # 체력 수치 표시 -->
             ctx.fillStyle = "#fff"; ctx.font = "bold 22px Arial"; ctx.textAlign = "left"
             ctx.fillText(f"❤️ HEALTH: {health_percent}%", 30, 45)
 
-            # 체력에 따라 색상 변경 (경고 효과)
+            <!-- # 체력에 따라 색상 변경 (경고 효과) -->
             if health_percent <= 30:
                 ctx.fillStyle = "#ff0000" # 30% 이하일 때 빨간색
             elif health_percent <= 60:
@@ -422,22 +364,23 @@
             else:
                 ctx.fillStyle = "#00ff00" # 그 외 녹색
 
-            # 수치 옆에 간단한 체력 바(Bar) 생성.
+            <!-- # 수치 옆에 간단한 체력 바(Bar) 생성. -->
             ctx.fillRect(30, 55, health_percent * 2, 10) # ctx.fillRect(x, y, width, heigth) -> 체력바 크기 조절 참고
 
-            # 남아있는 몬스터 수치
+            <!-- # 남아있는 몬스터 수치 -->
             alive_count = sum(1 for m in game.monsters if m.is_alive)
             ctx.fillStyle = 'rgb(185, 50, 217)'
             ctx.fillText(f"👾 MONSTERS LEFT: {alive_count}", 30, 85)
 
-            # 좌측 하단 총알 UI 표시
+            <!-- # 좌측 하단 총알 UI 표시 -->
             # 화면 높이(SCREEN_HEIGHT)에서 약 40px 위 지점
             ctx.fillStyle = "#ffd700" # 총알은 황금색으로 강조
             ctx.fillText(f"🔫 AMMO: {game.ammo}", 30, SCREEN_HEIGHT - 40)
 
-            draw_minimap() # 미니맵 전용 함수 호출
+            <!-- # 미니맵 전용 함수 호출 -->
+            draw_minimap()
 
-            # 7. 피드백 효과
+            <!-- # 7. 피드백 효과 -->
             if game.damage_frames > 0:
                 ctx.fillStyle = f"rgba(255, 0, 0, {game.damage_frames / 15})"
                 ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
@@ -447,7 +390,7 @@
                 ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
                 game.flash_frames -= 1
 
-            # 8. 게임 상태 UI 트리거
+            <!-- # 8. 게임 상태 UI 트리거 -->
             if game.game_state != "PLAYING":
                 ui_container.style.display = "flex"
                 if game.game_state == "GAMEOVER":
@@ -455,20 +398,20 @@
                 else:
                     status_text.innerText = "MISSION COMPLETE"; status_text.style.color = "#ff0"
             
-            # 8-1. 보스 격파로 게임 클리어 조건 + 화이트 아웃 연출
+            <!-- # 8-1. 보스 격파로 게임 클리어 조건 + 화이트 아웃 연출 -->
             if game.game_won:
-                # 타이머를 프레임마다 증가시킴 (약 2초 동안 하얗게 변함)
+                <!-- # 타이머를 프레임마다 증가시킴 (약 2초 동안 하얗게 변함) -->
                 if game.win_timer < 100:
                     game.win_timer += 1
                 
-                # 투명도 계산 (0.0에서 1.0까지 서서히 증가) -> 페이드 아웃 속도 조절. 높을수록 속도 느림.
+                <!-- # 투명도 계산 (0.0에서 1.0까지 서서히 증가) -> 페이드 아웃 속도 조절. 높을수록 속도 느림. -->
                 alpha = game.win_timer / 100
                 
-                # 화면 전체를 하얀색으로 덮음
+                <!-- # 화면 전체를 하얀색으로 덮음 -->
                 ctx.fillStyle = f"rgba(255, 255, 255, {alpha})"
                 ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
 
-                # 완전히 하얗게 변했을 때 승리 메시지 출력
+                <!-- # 완전히 하얗게 변했을 때 승리 메시지 출력 -->
                 if game.win_timer >= 60:
                     ctx.textAlign = "center"
                 
@@ -482,7 +425,7 @@
                     ctx.fillText(f"Resources Found: {game.items_collected}", SCREEN_WIDTH / 2, 340)
                     ctx.fillText(f"Total Score: {game.score}", SCREEN_WIDTH / 2, 380)
 
-                    # 최종 등급 (점수에 따른 평가)
+                    <!-- # 최종 등급 (점수에 따른 평가) -->
                     if game.win_timer >= 90:
                         rank = "SOLDIER"
                         if game.score > 4000: rank = "DOOM SLAYER"
@@ -511,7 +454,7 @@
                         game.attack_monster()
                         is_shooting = True
                 else:
-                    # 스페이스바를 떼면 다시 사격 가능 상태로 리셋
+                    <!-- # 스페이스바를 떼면 다시 사격 가능 상태로 리셋 -->
                     is_shooting = False
                 game.update_items()
             draw_scene()
